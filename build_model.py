@@ -9,6 +9,7 @@ import random
 from datetime import date, timedelta
 
 from openpyxl import Workbook
+from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -740,6 +741,104 @@ ws.conditional_formatting.add("D6:D80", FormulaRule(formula=['D6="ERROR"'], fill
 ws.conditional_formatting.add("D6:D80", FormulaRule(formula=['D6="OK"'], fill=PatternFill("solid", fgColor="C6EFCE")))
 ws.conditional_formatting.add("D6:D80", FormulaRule(formula=['D6="WARN"'], fill=PatternFill("solid", fgColor="FFEB9C")))
 
+# --------------------------------------------------------------- Dashboard
+SERIES_ACT, SERIES_FC = "2A78D6", "EB6834"  # categorical slots 1 and 2
+ws = wb.create_sheet("Dashboard", index=wb.sheetnames.index("National"))
+ws["A1"] = "Dashboard"
+ws["A1"].font = Font(bold=True, size=14)
+ws["A3"] = "Site"
+ws["B3"] = "National"
+ws["B3"].fill, ws["B3"].font = INPUT, Font(bold=True, color="0000FF")
+site_dv = DataValidation(type="list", formula1='"National,' + ",".join(c for c, *_ in SITES) + '"')
+ws.add_data_validation(site_dv)
+site_dv.add("B3")
+ws["C3"] = "Pick a site to update every chart. Blue = actual, orange = forecast."
+ws["C3"].font = HELP
+ws["A4"] = "Status"
+ws["B4"] = "=Checks!B3"
+DASH_SITES = ["National"] + [c for c, *_ in SITES]
+for i, nm in enumerate(DASH_SITES):
+    ws.cell(row=4 + i, column=25, value=nm).font = HELP  # column Y: selector list
+ws["X3"] = "Site no."
+ws["X4"] = f"=MATCH($B$3,$Y$4:$Y${3 + len(DASH_SITES)},0)"
+ws["X3"].font = ws["X4"].font = HELP
+
+# chart data for the selected site (helper block from column AA)
+METRICS = [("Total payroll", "J", '#,##0.0,,"m"'), ("WH hours worked", "G", '#,##0'),
+           ("CPLH (cases / hr)", "K", '0'), ("Cost per hour", "L", '$0'),
+           ("Cost per case (staff)", "M", '$0.00'), ("Total payroll % of sales", "P", '0.0%')]
+C0 = 27  # column AA
+ws.cell(row=2, column=C0, value="Chart data for the selected site (do not edit)").font = HELP
+ws.cell(row=3, column=C0, value="Month").font = BOLD
+for k, (title, col, fmt) in enumerate(METRICS):
+    ws.cell(row=3, column=C0 + 1 + 2 * k, value=f"{title}: actual").font = BOLD
+    ws.cell(row=3, column=C0 + 2 + 2 * k, value=f"{title}: forecast").font = BOLD
+for i, m in enumerate(MONTHS):
+    r, src = 4 + i, FIRST_ROW + i
+    ws.cell(row=r, column=C0, value=m).number_format = F_DATE
+    pick = lambda col: "CHOOSE($X$4," + ",".join(f"'{nm}'!{col}{src}" for nm in DASH_SITES) + ")"
+    status = pick("D")
+    for k, (title, col, fmt) in enumerate(METRICS):
+        val = pick(col)
+        a = ws.cell(row=r, column=C0 + 1 + 2 * k, value=f'=IF({status}="Actual",{val},NA())')
+        # forecast line starts at the last actual month so the two lines join
+        f = ws.cell(row=r, column=C0 + 2 + 2 * k,
+                    value=f'=IF(OR({status}="Forecast",${get_column_letter(C0)}{r}=LastActual),{val},NA())')
+        a.number_format = f.number_format = fmt
+D_LAST = 3 + N
+
+
+def line_chart(title, k, fmt):
+    ch = LineChart()
+    ch.title = title
+    ch.height, ch.width = 7.5, 16
+    ch.legend.position = "b"
+    ch.y_axis.number_format = fmt
+    ch.y_axis.majorGridlines.spPr = None
+    ch.x_axis.number_format = "mmm-yy"
+    ch.x_axis.delete = ch.y_axis.delete = False
+    ch.x_axis.tickLblSkip = 6
+    for off, color in ((1, SERIES_ACT), (2, SERIES_FC)):
+        ref = Reference(ws, min_col=C0 + off + 2 * k, min_row=3, max_row=D_LAST)
+        ch.add_data(ref, titles_from_data=True)
+        ser = ch.series[-1]
+        ser.graphicalProperties.line.solidFill = color
+        ser.graphicalProperties.line.width = 25400  # 2pt
+        ser.smooth = False
+        ser.marker.symbol = "none"
+        ser.tx.strRef = None
+        from openpyxl.chart.series import SeriesLabel
+        ser.tx = SeriesLabel(v="Actual" if off == 1 else "Forecast")
+    ch.set_categories(Reference(ws, min_col=C0, min_row=4, max_row=D_LAST))
+    return ch
+
+
+for k, (title, col, fmt) in enumerate(METRICS):
+    anchor = f"{'A' if k % 2 == 0 else 'L'}{6 + (k // 2) * 16}"
+    ws.add_chart(line_chart(title, k, fmt), anchor)
+
+# gap chart: top-down minus bottom-up staff payroll by site, FY2027 and FY2028 (from the National summary)
+gap_title_row = 4 + 4 * (len(SITES) + 4)
+bar = BarChart()
+bar.type = "bar"
+bar.title = "Plan payroll minus bottom-up need, by site (negative = plan looks too tight)"
+bar.height, bar.width = 9, 33
+bar.y_axis.number_format = '#,##0.0,,"m"'
+bar.x_axis.delete = bar.y_axis.delete = False
+bar.y_axis.majorGridlines.spPr = None
+bar.legend.position = "b"
+bar.gapWidth = 60
+nat = wb["National"]
+for col, color in ((21, SERIES_ACT), (22, SERIES_FC)):
+    bar.add_data(Reference(nat, min_col=col, min_row=gap_title_row + 1, max_row=gap_title_row + 1 + len(SITES)),
+                 titles_from_data=True)
+    bar.series[-1].graphicalProperties.solidFill = color
+    bar.series[-1].graphicalProperties.line.noFill = True
+bar.set_categories(Reference(nat, min_col=18, min_row=gap_title_row + 2, max_row=gap_title_row + 1 + len(SITES)))
+ws.add_chart(bar, f"A{6 + 3 * 16}")
+for col in "ABCDEFGHIJKLMNOPQRSTUVW":
+    ws.column_dimensions[col].width = 9
+
 # tab colours
 for nm in wb.sheetnames:
     if nm in ("Inputs", "Data_Actuals", "Plan_Inputs", "Holidays"):
@@ -748,7 +847,7 @@ for nm in wb.sheetnames:
         wb[nm].sheet_properties.tabColor = "1F3864"
     elif nm in ("IDC-NSW", "IDC-VIC"):
         wb[nm].sheet_properties.tabColor = "2E75B6"
-    elif nm == "National":
+    elif nm in ("National", "Dashboard"):
         wb[nm].sheet_properties.tabColor = "00B050"
 
 wb.calculation.fullCalcOnLoad = True

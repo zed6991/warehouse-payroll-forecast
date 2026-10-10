@@ -150,6 +150,12 @@ With the example above, if last year's CPLH was 72: 3.15m / 72 = 43,750 hours x 
 
 **How:** IDC cases now follow the combined sales of the regions it serves (IDC-NSW: NSW-1 + NSW-2, IDC-VIC: VIC-1 + VIC-2). The cases per $ rate is measured against that combined sales figure too. IDC payroll % still applies to the host region's sales, as in the plan.
 
+### Dashboard
+
+**Why:** 10 site tabs with 48 rows each are hard to scan.
+
+**How:** pick National or any site from the dropdown, and six charts update: total payroll, hours, CPLH, cost per hour, cost per case and payroll % of sales. Actuals are blue and the forecast is orange, so a jump at the switch-over point stands out. A bar chart shows the bottom-up gap by site for FY2027 and FY2028.
+
 ## Workbook tabs
 
 - **README**: how to update and how the logic works
@@ -158,6 +164,7 @@ With the example above, if last year's CPLH was 72: 3.15m / 72 = 43,750 hours x 
 - **Plan_Inputs**: sales forecast and payroll % of sales per site per month
 - **Holidays / Calendar**: public holidays by state, PH cost factor, wage index
 - **Checks**: data coverage and reconciliation checks, plus CPLH warnings
+- **Dashboard**: site selector and charts
 - **National**: all sites added up, plus site-by-year summaries
 - **One tab per site**: drivers and metrics on the left, helper columns (actuals, run rates, plan) in grey on the right
 
