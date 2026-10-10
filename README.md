@@ -61,6 +61,7 @@ The forecast for a month is **level x that month's seasonal index**.
 - The last 6 months show how the site runs *now*, and averaging 6 months smooths out one-off noise.
 - 12 months are needed to see each calendar month once, so that's where the shape comes from.
 - Dividing out the seasonal index before averaging stops a busy month from skewing the level. Without it, a 6-month window that includes December would set the level too high for every month after.
+- Each rate can also drift by a yearly trend. See [Yearly trends](#yearly-trends).
 
 ## Public holidays and wage increases
 
@@ -107,10 +108,26 @@ One cell drives everything: **Last actual month** on the Inputs tab. Months up t
 3. Move **Last actual month** forward.
 4. Check that the Checks tab says **ALL CHECKS OK**.
 
+## Added after the first version
+
+The sections below were built one at a time on top of the first version, in this order.
+
+### Yearly trends
+
+**Why:** in the first version, run rates stayed flat forever. That overstated 2027-28 cases, because price inflation means each dollar of sales buys fewer cases every year.
+
+**How:** each run rate (cases per $, cost per hour, leadership) has a yearly trend on the Inputs tab, applied from the last actual month:
+
+```
+Forecast rate = level x seasonal index x (1 + trend) ^ (years after last actual month)
+```
+
+The default is -1.5% a year on cases per $ and 0% on the others. Cost per hour already gets wage increases separately, so its trend is only for other drift.
+
 ## Workbook tabs
 
 - **README**: how to update and how the logic works
-- **Inputs**: last actual month, scenario switch, wage increases, public-holiday assumptions, site list
+- **Inputs**: last actual month, scenario switch, wage increases, public-holiday assumptions, site list, trends
 - **Data_Actuals**: actuals in long format (one row per site per month). Paste over it to update.
 - **Plan_Inputs**: sales forecast and payroll % of sales per site per month
 - **Holidays / Calendar**: public holidays by state, PH cost factor, wage index
@@ -132,4 +149,4 @@ This outputs `warehouse_payroll_forecast.xlsx`. The workbook recalculates when i
 
 ## Status
 
-First version. Later improvements are on the `improvements` branch.
+In progress on the `improvements` branch.
