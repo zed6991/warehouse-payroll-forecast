@@ -243,6 +243,7 @@ readme = [
     ("Leadership = sales x leadership % run rate.  Staff payroll = total payroll - leadership.", None),
     ("Cost per hour = run rate x public-holiday factor x wage index.  Hours = staff payroll / cost per hour.", None),
     ("Cases = sales x cases-per-$ run rate x (1 + scenario cases lever).", None),
+    ("Each run rate can drift by a yearly trend (Inputs), e.g. price inflation lowering cases per $ of sales.", None),
     ("CPLH = cases / hours.  Cost per case = staff payroll / cases (excludes leadership).", None),
     ("", None),
     ("RUN RATES (cases per $ sales, cost per hour, leadership %)", BOLD),
@@ -288,6 +289,17 @@ for r in (3, 4, 5):
 name("LastActual", "Inputs!$B$3")
 name("RunRateMonths", "Inputs!$B$4")
 name("SeasonMonths", "Inputs!$B$5")
+
+ws.column_dimensions["D"].width = 40
+ws["D3"] = "Run-rate trend per year (from last actual month)"
+ws["D3"].font = BOLD
+for i, (label, nm, v) in enumerate([("Cases per $ sales (price inflation pushes this down)", "TrendCPS", -0.015),
+                                    ("Cost per hour (before wage increases)", "TrendCPH", 0.0),
+                                    ("Leadership", "TrendLead", 0.0)]):
+    r = 4 + i
+    ws[f"D{r}"], ws[f"E{r}"] = label, v
+    ws[f"E{r}"].number_format, ws[f"E{r}"].fill, ws[f"E{r}"].font = '0.0%', INPUT, BLUE
+    name(nm, f"Inputs!$E${r}")
 
 ws["A8"] = "Scenario"
 ws["A8"].font = BOLD
@@ -445,6 +457,7 @@ SITE_COLS = {
     "AB": ("Plan sales", F_INT, 12), "AC": ("Plan payroll %", F_PCT, 9),
     "AD": ("Season idx cases/$", '0.000', 9), "AE": ("Season idx CPH", '0.000', 9), "AF": ("Season idx lead %", '0.000', 9),
     "AG": ("Fcst cases per $", F_RATIO, 10), "AH": ("Fcst CPH", F_CPH, 9), "AI": ("Fcst leadership %", F_PCT, 9),
+    "AJ": ("Years after last actual", '0.00', 8),
 }
 UNITS = {"E": "$m", "F": "m", "G": "#", "H": "$m", "I": "$m", "J": "$m", "K": "#", "L": "$", "M": "$",
          "N": "%", "O": "%", "P": "%"}
@@ -468,7 +481,7 @@ def style_site_sheet(ws):
     ws.column_dimensions["Q"].width = 2
     ws.row_dimensions[13].height = 45
     for col, text, span in (("E", "Drivers", "E12:J12"), ("K", "Metrics", "K12:P12"),
-                            ("R", "Helper calculations (actuals, run rates, plan)", "R12:AI12")):
+                            ("R", "Helper calculations (actuals, run rates, plan)", f"R12:{list(SITE_COLS)[-1]}12")):
         ws.merge_cells(span)
         header(ws, 12, ws[f"{col}1"].column, text)
     ws.freeze_panes = f"E{FIRST_ROW}"
@@ -565,9 +578,10 @@ def build_site(code, typ, state, host):
         for col, src in (("AD", "W"), ("AE", "X"), ("AF", "Y")):
             ws[f"{col}{r}"] = (f"=IFERROR(AVERAGEIFS({RNG(src)},{ACT_WIN('SeasonMonths')},{RNG('C')},$C{r})"
                                f"/AVERAGEIFS({RNG(src)},{ACT_WIN('SeasonMonths')}),\"\")")
-        ws[f"AG{r}"] = f"=IFERROR($AG$2*AD{r},\"\")"
-        ws[f"AH{r}"] = f"=IFERROR($AH$2*AE{r}*Z{r}*AA{r},\"\")"
-        ws[f"AI{r}"] = f"=IFERROR($AI$2*AF{r},\"\")"
+        ws[f"AJ{r}"] = f"=MAX(0,(YEAR(A{r})-YEAR(LastActual))*12+MONTH(A{r})-MONTH(LastActual))/12"
+        ws[f"AG{r}"] = f"=IFERROR($AG$2*AD{r}*(1+TrendCPS)^AJ{r},\"\")"
+        ws[f"AH{r}"] = f"=IFERROR($AH$2*AE{r}*Z{r}*AA{r}*(1+TrendCPH)^AJ{r},\"\")"
+        ws[f"AI{r}"] = f"=IFERROR($AI$2*AF{r}*(1+TrendLead)^AJ{r},\"\")"
     style_site_sheet(ws)
 
 
