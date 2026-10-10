@@ -12,15 +12,17 @@ For each site and month:
 |---|---|
 | Sales | Plan sales x (1 + scenario sales lever). IDCs use their host region's sales. |
 | Total payroll | Sales x plan payroll % of sales (the driver) |
-| Leadership payroll | Sales x leadership % run rate |
+| Leadership payroll | Sales x leadership % run rate, or run-rate $ stepped up by wage increases (switch) |
 | Staff payroll | Total payroll - leadership |
 | Cost per hour | Run rate x public-holiday factor x wage index |
 | Hours | Staff payroll / cost per hour |
-| Cases | Sales x cases-per-$ run rate x (1 + scenario cases lever) |
+| Cases | Volume driver sales x cases-per-$ run rate x (1 + scenario cases lever). IDCs use the sales of the regions they serve (ECK: MIN+PRE, TRUG: DER+DAN). |
 | CPLH | Cases / hours |
 | Cost per case | Staff payroll / cases (excludes leadership) |
 
-Run rates use the last 6 actual months for the level and the last 12 actual months for the seasonal shape. Cost per hour is stripped of public-holiday and wage effects before the run rate is taken, then they are added back per forecast month, so a moving Easter or a wage increase shows up in the right month.
+Run rates use the last 6 actual months for the level, a yearly trend input (e.g. price inflation lowering cases per $), and the last 12 actual months for the seasonal shape. Cost per hour is stripped of public-holiday and wage effects before the run rate is taken, then they are added back per forecast month, so a moving Easter or a wage increase shows up in the right month.
+
+A bottom-up cross-check costs the forecast cases at last year's CPLH (plus an optional productivity target) and shows the gap to the plan payroll, and the Checks tab warns when forecast CPLH moves more than a set tolerance vs last year.
 
 The National tab sums all sites, but excludes IDC sales (they duplicate the host region's sales).
 
@@ -31,7 +33,9 @@ The National tab sums all sites, but excludes IDC sales (they duplicate the host
 - **Data_Actuals**: actuals in long format (one row per site per month). Paste over it to update.
 - **Plan_Inputs**: sales forecast and payroll % of sales per site per month
 - **Holidays / Calendar**: public holidays by state, PH cost factor, wage index
-- **Checks**: data coverage and reconciliation checks
+- **Checks**: data coverage and reconciliation checks, plus CPLH warnings
+- **Dashboard**: site selector and charts (payroll, hours, CPLH, cost per hour, cost per case, payroll %, plan vs bottom-up gap)
+- **Backtest**: set the last actual month earlier and compare the forecast with actuals
 - **National**, one tab per region and IDC
 
 ## Build
@@ -46,4 +50,6 @@ Outputs `warehouse_payroll_forecast.xlsx`.
 
 ## Status
 
-First version. Known limitations and planned improvements are tracked in the issues and on the `improvements` branch.
+Backtest on the synthetic data (forecasting Apr-Sep 2026 from Mar 2026): mean absolute error of 1.0% on cases, 0.4% on hours and 1.4% on CPLH. The synthetic data was generated with similar logic to the model, so this proves the mechanics, not the method. Real actuals are the real test.
+
+Not yet done: chamber split (ambient / chiller / freezer), per-region scenario levers, forecasting past Dec 2028.
