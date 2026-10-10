@@ -91,7 +91,9 @@ So cost per hour is 5.2% higher than in a month with no holidays. The share of h
 ## IDCs
 
 The two IDCs (intermediary DCs) have no sales of their own.
-They borrow their host region's sales: IDC-NSW uses NSW-1, IDC-VIC uses VIC-1. The plan payroll % and the cases per $ of sales for an IDC are both measured against the host's sales.
+
+- **Payroll** uses the host region's sales: IDC-NSW uses NSW-1, IDC-VIC uses VIC-1. The plan payroll % for an IDC is a % of its host's sales.
+- **Cases** follow the combined sales of every region the IDC ships to: IDC-NSW serves NSW-1 + NSW-2, and IDC-VIC serves VIC-1 + VIC-2. (This was added after the first version. See [IDC volume](#idc-volume-from-every-region-served).)
 
 The National tab adds up payroll, hours and cases for all 10 sites, but takes sales from the 8 regions only. IDC sales would count the host's sales twice.
 
@@ -141,6 +143,12 @@ With the example above, if last year's CPLH was 72: 3.15m / 72 = 43,750 hours x 
 - The productivity target (default 0%) is on the Inputs tab, e.g. +2% if the site is expected to improve.
 - The National tab shows the gap by site and year.
 - The Checks tab warns when forecast CPLH moves more than a tolerance (default 10%) from the same month last year.
+
+### IDC volume from every region served
+
+**Why:** an IDC ships to more than its host region. Driving its cases from the host's sales alone missed the volume going to the other region.
+
+**How:** IDC cases now follow the combined sales of the regions it serves (IDC-NSW: NSW-1 + NSW-2, IDC-VIC: VIC-1 + VIC-2). The cases per $ rate is measured against that combined sales figure too. IDC payroll % still applies to the host region's sales, as in the plan.
 
 ## Workbook tabs
 

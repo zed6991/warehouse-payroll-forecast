@@ -48,6 +48,8 @@ SITES = [
     ("IDC-VIC", "IDC", "VIC", "VIC-1"),
 ]
 REGIONS = [s[0] for s in SITES if s[1] == "Region"]
+# regions each IDC ships to: their sales drive IDC volume (payroll % stays on host sales)
+SERVED = {"IDC-NSW": ["NSW-1", "NSW-2"], "IDC-VIC": ["VIC-1", "VIC-2"]}
 STATES = ["NSW", "VIC", "QLD", "SA", "WA"]
 
 WAGE_TABLE = [(date(2026, 1, 1), 0.040), (date(2027, 1, 1), 0.045), (date(2028, 1, 1), 0.045)]
@@ -159,7 +161,7 @@ PARAMS = {
     "NSW-1": (150, .0210, 78, .32), "VIC-1": (140, .0215, 80, .30), "QLD-1": (115, .0220, 74, .26),
     "NSW-2": (125, .0212, 76, .28), "VIC-2": (135, .0208, 79, .30), "QLD-2": (120, .0218, 75, .27),
     "SA-1": (80, .0225, 72, .21), "WA-1": (105, .0223, 73, .25),
-    "IDC-NSW": (None, .0060, 110, .15), "IDC-VIC": (None, .0055, 105, .14),
+    "IDC-NSW": (None, .0030, 110, .15), "IDC-VIC": (None, .0028, 105, .14),
 }
 
 
@@ -174,7 +176,8 @@ def synth():
             else:
                 sales = data[(host, m)]["sales"]
             cps = cps0 * 0.985 ** (t / 12) * (0.98 if m.month == 12 else 1) * (1 + rng.gauss(0, .01))
-            cases = sales * cps
+            driver = sum(data[(s, m)]["sales"] for s in SERVED[code]) if typ == "IDC" else sales
+            cases = driver * cps
             cplh = cplh0 * SEASON_CPLH[m.month] * 1.01 ** (t / 12) * (1 + rng.gauss(0, .015))
             hours = cases / cplh
             cph = STATE_CPH[state] * (1.06 if typ == "IDC" else 1) * wage_index(m) * ph_factor(m, state) * (1 + rng.gauss(0, .008))
@@ -242,7 +245,8 @@ readme = [
     ("Total payroll = sales x plan payroll % (the driver).", None),
     ("Leadership = sales x leadership % run rate.  Staff payroll = total payroll - leadership.", None),
     ("Cost per hour = run rate x public-holiday factor x wage index.  Hours = staff payroll / cost per hour.", None),
-    ("Cases = sales x cases-per-$ run rate x (1 + scenario cases lever).", None),
+    ("Cases = volume driver sales x cases-per-$ run rate x (1 + scenario cases lever).", None),
+    ("Volume driver: a region's own sales; an IDC's served regions (IDC-NSW: NSW-1+NSW-2, IDC-VIC: VIC-1+VIC-2).", None),
     ("Each run rate can drift by a yearly trend (Inputs), e.g. price inflation lowering cases per $ of sales.", None),
     ("CPLH = cases / hours.  Cost per case = staff payroll / cases (excludes leadership).", None),
     ("", None),
@@ -369,11 +373,11 @@ name("PH_Loading", "Inputs!$B$32")
 
 ws["A34"] = "Sites"
 ws["A34"].font = BOLD
-for j, t in enumerate(["Code", "Type", "State", "Sales source", "In national sales?"], 1):
+for j, t in enumerate(["Code", "Type", "State", "Payroll % basis", "In national sales?", "Volume driver"], 1):
     header(ws, 35, j, t)
 for i, (code, typ, st, host) in enumerate(SITES):
     r = 36 + i
-    vals = [code, typ, st, host or code, "No" if typ == "IDC" else "Yes"]
+    vals = [code, typ, st, host or code, "No" if typ == "IDC" else "Yes", "+".join(SERVED.get(code, [code]))]
     for j, v in enumerate(vals, 1):
         ws.cell(row=r, column=j, value=v)
 name("SiteCodes", f"Inputs!$A$36:$A${35 + len(SITES)}")
@@ -475,6 +479,7 @@ SITE_COLS = {
     "AK": ("LY CPLH (same month)", F_1, 9), "AL": ("Bottom-up hours", F_INT, 11),
     "AM": ("Bottom-up staff payroll", F_INT, 12), "AN": ("Top-down minus bottom-up $", F_INT, 12),
     "AO": ("Fcst CPLH vs LY", F_PCT, 9),
+    "AP": ("Volume driver sales", F_INT, 12),
 }
 UNITS = {"E": "$m", "F": "m", "G": "#", "H": "$m", "I": "$m", "J": "$m", "K": "#", "L": "$", "M": "$",
          "N": "%", "O": "%", "P": "%"}
@@ -549,7 +554,8 @@ def fy_block(ws):
 
 def build_site(code, typ, state, host):
     ws = wb.create_sheet(code)
-    ws["A1"] = f"{code}  |  {typ}  |  {state}" + (f"  |  sales from {host} (excluded from national sales)" if host else "")
+    ws["A1"] = f"{code}  |  {typ}  |  {state}" + (
+        f"  |  payroll % of {host} sales  |  volume from {'+'.join(SERVED[code])} sales" if host else "")
     ws["A1"].font = Font(bold=True, size=14)
     ws["A2"], ws["B2"], ws["C2"], ws["D2"] = "Code", code, "State", state
     ws["B2"].font = ws["D2"].font = BOLD
@@ -576,7 +582,8 @@ def build_site(code, typ, state, host):
         else:
             ws[f"E{r}"] = f"=IF({act},R{r},AB{r}*(1+SalesAdj))"
             ws[f"R{r}"] = f'=IF({act},{data_sum("C", r)},"")'
-        ws[f"F{r}"] = f"=IF({act},S{r},E{r}*AG{r}*(1+CasesAdj))"
+        ws[f"F{r}"] = f"=IF({act},S{r},AP{r}*AG{r}*(1+CasesAdj))"
+        ws[f"AP{r}"] = ("=" + "+".join(f"'{s}'!E{r}" for s in SERVED[code])) if typ == "IDC" else f"=E{r}"
         ws[f"G{r}"] = f"=IF({act},T{r},IFERROR(H{r}/AH{r},0))"
         ws[f"H{r}"] = f"=IF({act},U{r},J{r}-I{r})"
         ws[f"I{r}"] = f"=IF({act},V{r},E{r}*AI{r})"
@@ -584,7 +591,7 @@ def build_site(code, typ, state, host):
         metric_formulas(ws, r)
         for col, src in (("S", "D"), ("T", "E"), ("U", "F"), ("V", "G")):
             ws[f"{col}{r}"] = f'=IF({act},{data_sum(src, r)},"")'
-        ws[f"W{r}"] = f'=IF({act},IFERROR(S{r}/R{r},""),"")'
+        ws[f"W{r}"] = f'=IF({act},IFERROR(S{r}/AP{r},""),"")'
         ws[f"X{r}"] = f'=IF({act},IFERROR(U{r}/T{r}/Z{r}/AA{r},""),"")'
         ws[f"Y{r}"] = f'=IF({act},IFERROR(V{r}/R{r},""),"")'
         ws[f"Z{r}"] = (f"=INDEX(Calendar!$H$5:$L${4 + N},MATCH($A{r},Calendar!$A$5:$A${4 + N},0),"
