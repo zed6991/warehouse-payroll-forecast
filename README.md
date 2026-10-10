@@ -102,7 +102,7 @@ The Inputs tab has Base, Upside and Downside scenarios, each with a sales lever 
 
 One cell drives everything: **Last actual month** on the Inputs tab. Months up to and including it show actuals from Data_Actuals. Later months show the forecast. The run rates always use the months just before it, so rolling the model forward is:
 
-1. Paste the new actuals into Data_Actuals (one row per site per month, keep the column order).
+1. Paste the new actuals into Data_Actuals (one row per site per month, keep the column order). There is room for 5,000 rows.
 2. Paste the updated plan (sales forecast and payroll % of sales) into Plan_Inputs.
 3. Move **Last actual month** forward.
 4. Check that the Checks tab says **ALL CHECKS OK**.
