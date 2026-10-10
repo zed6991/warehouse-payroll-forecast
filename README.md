@@ -156,15 +156,30 @@ With the example above, if last year's CPLH was 72: 3.15m / 72 = 43,750 hours x 
 
 **How:** pick National or any site from the dropdown, and six charts update: total payroll, hours, CPLH, cost per hour, cost per case and payroll % of sales. Actuals are blue and the forecast is orange, so a jump at the switch-over point stands out. A bar chart shows the bottom-up gap by site for FY2027 and FY2028.
 
+### Backtest
+
+**Why:** a forecast method should be tested on months where the answer is already known.
+
+**How:** set **Last actual month** earlier (e.g. Mar 2026). The model then forecasts months that already have actuals, and the Backtest tab compares the two, with the mean absolute error for cases, hours, staff payroll, leadership and CPLH. Set it back afterwards.
+
+### Leadership forecast method
+
+**Why:** leadership pay doesn't really grow with sales. It's a fixed team that gets wage increases.
+
+**How:** a switch on the Inputs tab picks between:
+- **% of sales** (the default, as in the first version): leadership grows with sales.
+- **$ + wage increases**: recent leadership dollars (seasonally adjusted, with past wage increases stripped out) stepped up by each wage increase.
+
 ## Workbook tabs
 
 - **README**: how to update and how the logic works
-- **Inputs**: last actual month, scenario switch, wage increases, public-holiday assumptions, site list, trends, productivity target
+- **Inputs**: last actual month, scenario switch, wage increases, public-holiday assumptions, site list, trends, productivity target, leadership method
 - **Data_Actuals**: actuals in long format (one row per site per month). Paste over it to update.
 - **Plan_Inputs**: sales forecast and payroll % of sales per site per month
 - **Holidays / Calendar**: public holidays by state, PH cost factor, wage index
 - **Checks**: data coverage and reconciliation checks, plus CPLH warnings
 - **Dashboard**: site selector and charts
+- **Backtest**: forecast vs actual when the last actual month is set earlier
 - **National**: all sites added up, plus site-by-year summaries
 - **One tab per site**: drivers and metrics on the left, helper columns (actuals, run rates, plan) in grey on the right
 
@@ -182,4 +197,6 @@ This outputs `warehouse_payroll_forecast.xlsx`. The workbook recalculates when i
 
 ## Status
 
-In progress on the `improvements` branch.
+Backtest on the synthetic data (forecasting Apr-Sep 2026 from Mar 2026): mean absolute error of 1.0% on cases, 0.4% on hours and 1.4% on CPLH. The synthetic data was generated with logic similar to the model's, so this proves the mechanics, not the method. Real actuals are the real test.
+
+Not yet done: a split by chamber (ambient / chiller / freezer), scenario levers per region, and forecasting past Dec 2028.

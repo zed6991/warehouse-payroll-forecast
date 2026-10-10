@@ -244,7 +244,8 @@ readme = [
     ("FORECAST LOGIC (per site, per month)", BOLD),
     ("Sales = plan sales x (1 + scenario sales lever). IDCs use their host region's sales (IDC-NSW = NSW-1, IDC-VIC = VIC-1).", None),
     ("Total payroll = sales x plan payroll % (the driver).", None),
-    ("Leadership = sales x leadership % run rate.  Staff payroll = total payroll - leadership.", None),
+    ("Leadership = sales x leadership % run rate, or run-rate $ stepped up by wage increases (switch on Inputs).", None),
+    ("Staff payroll = total payroll - leadership.", None),
     ("Cost per hour = run rate x public-holiday factor x wage index.  Hours = staff payroll / cost per hour.", None),
     ("Cases = volume driver sales x cases-per-$ run rate x (1 + scenario cases lever).", None),
     ("Volume driver: a region's own sales; an IDC's served regions (IDC-NSW: NSW-1+NSW-2, IDC-VIC: VIC-1+VIC-2).", None),
@@ -310,6 +311,17 @@ for i, (label, nm, v) in enumerate([("Cases per $ sales (price inflation pushes 
     ws[f"D{r}"], ws[f"E{r}"] = label, v
     ws[f"E{r}"].number_format, ws[f"E{r}"].fill, ws[f"E{r}"].font = '0.0%', INPUT, BLUE
     name(nm, f"Inputs!$E${r}")
+
+ws["D12"] = "Leadership forecast method"
+ws["D12"].font = BOLD
+ws["E12"] = "% of sales"
+ws["E12"].fill, ws["E12"].font = INPUT, BLUE
+lead_dv = DataValidation(type="list", formula1='"% of sales,$ + wage increases"', allow_blank=False)
+ws.add_data_validation(lead_dv)
+lead_dv.add("E12")
+ws["D13"] = "% of sales: grows with sales. $ + wage increases: run-rate dollars that step up with each wage increase."
+ws["D13"].font = HELP
+name("LeadMethod", "Inputs!$E$12")
 
 ws["D8"] = "Bottom-up cross-check"
 ws["D8"].font = BOLD
@@ -481,6 +493,8 @@ SITE_COLS = {
     "AM": ("Bottom-up staff payroll", F_INT, 12), "AN": ("Top-down minus bottom-up $", F_INT, 12),
     "AO": ("Fcst CPLH vs LY", F_PCT, 9),
     "AP": ("Volume driver sales", F_INT, 12),
+    "AQ": ("Act leadership $ (ex wage)", F_INT, 12), "AR": ("Season idx lead $", '0.000', 9),
+    "AS": ("Fcst leadership $", F_INT, 12),
 }
 UNITS = {"E": "$m", "F": "m", "G": "#", "H": "$m", "I": "$m", "J": "$m", "K": "#", "L": "$", "M": "$",
          "N": "%", "O": "%", "P": "%"}
@@ -564,7 +578,7 @@ def build_site(code, typ, state, host):
     ws["AF2"], ws["AF3"] = "Run-rate level:", "(last 6 mths / season idx)"
     ws["AF2"].font = BOLD
     ws["AF3"].font = HELP
-    for col, act, si in (("AG", "W", "AD"), ("AH", "X", "AE"), ("AI", "Y", "AF")):
+    for col, act, si in (("AG", "W", "AD"), ("AH", "X", "AE"), ("AI", "Y", "AF"), ("AS", "AQ", "AR")):
         ws[f"{col}2"] = (f"=AVERAGEIFS({RNG(act)},{ACT_WIN('RunRateMonths')})"
                          f"/AVERAGEIFS({RNG(si)},{ACT_WIN('RunRateMonths')})")
         ws[f"{col}2"].number_format = SITE_COLS[col][1]
@@ -584,10 +598,14 @@ def build_site(code, typ, state, host):
             ws[f"E{r}"] = f"=IF({act},R{r},AB{r}*(1+SalesAdj))"
             ws[f"R{r}"] = f'=IF({act},{data_sum("C", r)},"")'
         ws[f"F{r}"] = f"=IF({act},S{r},AP{r}*AG{r}*(1+CasesAdj))"
+        ws[f"AQ{r}"] = f'=IF({act},IFERROR(V{r}/AA{r},""),"")'
+        ws[f"AR{r}"] = (f"=IFERROR(AVERAGEIFS({RNG('AQ')},{ACT_WIN('SeasonMonths')},{RNG('C')},$C{r})"
+                        f"/AVERAGEIFS({RNG('AQ')},{ACT_WIN('SeasonMonths')}),\"\")")
+        ws[f"AS{r}"] = f"=IFERROR($AS$2*AR{r}*AA{r}*(1+TrendLead)^AJ{r},\"\")"
         ws[f"AP{r}"] = ("=" + "+".join(f"'{s}'!E{r}" for s in SERVED[code])) if typ == "IDC" else f"=E{r}"
         ws[f"G{r}"] = f"=IF({act},T{r},IFERROR(H{r}/AH{r},0))"
         ws[f"H{r}"] = f"=IF({act},U{r},J{r}-I{r})"
-        ws[f"I{r}"] = f"=IF({act},V{r},E{r}*AI{r})"
+        ws[f"I{r}"] = f'=IF({act},V{r},IF(LeadMethod="% of sales",E{r}*AI{r},AS{r}))'
         ws[f"J{r}"] = f"=IF({act},U{r}+V{r},E{r}*AC{r})"
         metric_formulas(ws, r)
         for col, src in (("S", "D"), ("T", "E"), ("U", "F"), ("V", "G")):
@@ -741,6 +759,47 @@ ws.conditional_formatting.add("D6:D80", FormulaRule(formula=['D6="ERROR"'], fill
 ws.conditional_formatting.add("D6:D80", FormulaRule(formula=['D6="OK"'], fill=PatternFill("solid", fgColor="C6EFCE")))
 ws.conditional_formatting.add("D6:D80", FormulaRule(formula=['D6="WARN"'], fill=PatternFill("solid", fgColor="FFEB9C")))
 
+# ---------------------------------------------------------------- Backtest
+ws = wb.create_sheet("Backtest", index=wb.sheetnames.index("National"))
+ws["A1"] = "Backtest: forecast vs actual"
+ws["A1"].font = Font(bold=True, size=14)
+ws["A2"] = ("To backtest, set 'Last actual month' on Inputs earlier (e.g. Mar-26). Months after it that have actuals "
+            "in Data_Actuals are compared with the model. Set it back afterwards.")
+ws["A2"].font = HELP
+BT = [("Cases", "D", "F", F_CASES), ("Hours", "E", "G", F_INT), ("Staff payroll", "F", "H", F_M),
+      ("Leadership", "G", "I", F_M), ("CPLH", None, "K", F_1)]
+ws["A4"] = "Mean absolute error"
+ws["A4"].font = BOLD
+header(ws, 7, 1, "Month", width=9)
+header(ws, 7, 2, "Status", width=9)
+for k, (title, dcol, mcol, fmt) in enumerate(BT):
+    c = 3 + 3 * k
+    ws.merge_cells(start_row=6, start_column=c, end_row=6, end_column=c + 2)
+    header(ws, 6, c, title)
+    for j, t in enumerate(["Actual", "Model", "Error"]):
+        header(ws, 7, c + j, t, width=12)
+    e = get_column_letter(c + 2)
+    ws.cell(row=4, column=c + 2, value=(f'=IFERROR((SUMIF({e}8:{e}{7 + N},">0")-SUMIF({e}8:{e}{7 + N},"<0"))'
+                                         f'/COUNT({e}8:{e}{7 + N}),"n/a")')).number_format = F_PCT
+    ws.cell(row=4, column=c + 2).font = BOLD
+    for i, m in enumerate(MONTHS):
+        r, src = 8 + i, FIRST_ROW + i
+        a, mo, er = (get_column_letter(c + j) for j in range(3))
+        if dcol:
+            ws[f"{a}{r}"] = f"=SUMIFS({DR(dcol)},{DR('A')},$A{r})"
+        else:  # CPLH = actual cases / actual hours
+            ws[f"{a}{r}"] = f"=IFERROR(C{r}/F{r},0)"
+        ws[f"{mo}{r}"] = f"=National!{mcol}{src}"
+        ws[f"{er}{r}"] = f'=IF(AND($B{r}="Forecast",{a}{r}>0),{mo}{r}/{a}{r}-1,"")'
+        ws[f"{a}{r}"].number_format = ws[f"{mo}{r}"].number_format = fmt
+        ws[f"{er}{r}"].number_format = F_PCT
+for i, m in enumerate(MONTHS):
+    r = 8 + i
+    ws[f"A{r}"] = m
+    ws[f"A{r}"].number_format = F_DATE
+    ws[f"B{r}"] = f"=National!D{FIRST_ROW + i}"
+ws.freeze_panes = "C8"
+
 # --------------------------------------------------------------- Dashboard
 SERIES_ACT, SERIES_FC = "2A78D6", "EB6834"  # categorical slots 1 and 2
 ws = wb.create_sheet("Dashboard", index=wb.sheetnames.index("National"))
@@ -847,7 +906,7 @@ for nm in wb.sheetnames:
         wb[nm].sheet_properties.tabColor = "1F3864"
     elif nm in ("IDC-NSW", "IDC-VIC"):
         wb[nm].sheet_properties.tabColor = "2E75B6"
-    elif nm in ("National", "Dashboard"):
+    elif nm in ("National", "Dashboard", "Backtest"):
         wb[nm].sheet_properties.tabColor = "00B050"
 
 wb.calculation.fullCalcOnLoad = True
