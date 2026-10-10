@@ -246,6 +246,11 @@ readme = [
     ("Each run rate can drift by a yearly trend (Inputs), e.g. price inflation lowering cases per $ of sales.", None),
     ("CPLH = cases / hours.  Cost per case = staff payroll / cases (excludes leadership).", None),
     ("", None),
+    ("BOTTOM-UP CROSS-CHECK", BOLD),
+    ("Bottom-up staff payroll = cases / (LY CPLH x (1 + productivity target)) x forecast cost per hour.", None),
+    ("If top-down (plan) payroll is well below bottom-up, the plan needs a productivity jump to hit. See National tab", None),
+    ("and the Checks tab, which warns when forecast CPLH moves more than the tolerance vs the same month last year.", None),
+    ("", None),
     ("RUN RATES (cases per $ sales, cost per hour, leadership %)", BOLD),
     ("Seasonal index = each calendar month vs the average over the last 12 actual months.", None),
     ("Level = average of the last 6 actual months / average seasonal index of those months.", None),
@@ -297,6 +302,15 @@ for i, (label, nm, v) in enumerate([("Cases per $ sales (price inflation pushes 
                                     ("Cost per hour (before wage increases)", "TrendCPH", 0.0),
                                     ("Leadership", "TrendLead", 0.0)]):
     r = 4 + i
+    ws[f"D{r}"], ws[f"E{r}"] = label, v
+    ws[f"E{r}"].number_format, ws[f"E{r}"].fill, ws[f"E{r}"].font = '0.0%', INPUT, BLUE
+    name(nm, f"Inputs!$E${r}")
+
+ws["D8"] = "Bottom-up cross-check"
+ws["D8"].font = BOLD
+for i, (label, nm, v) in enumerate([("Productivity target: CPLH change vs same month LY", "ProdTarget", 0.0),
+                                    ("Warn if forecast CPLH moves more than this vs LY", "CPLHTol", 0.10)]):
+    r = 9 + i
     ws[f"D{r}"], ws[f"E{r}"] = label, v
     ws[f"E{r}"].number_format, ws[f"E{r}"].fill, ws[f"E{r}"].font = '0.0%', INPUT, BLUE
     name(nm, f"Inputs!$E${r}")
@@ -458,6 +472,9 @@ SITE_COLS = {
     "AD": ("Season idx cases/$", '0.000', 9), "AE": ("Season idx CPH", '0.000', 9), "AF": ("Season idx lead %", '0.000', 9),
     "AG": ("Fcst cases per $", F_RATIO, 10), "AH": ("Fcst CPH", F_CPH, 9), "AI": ("Fcst leadership %", F_PCT, 9),
     "AJ": ("Years after last actual", '0.00', 8),
+    "AK": ("LY CPLH (same month)", F_1, 9), "AL": ("Bottom-up hours", F_INT, 11),
+    "AM": ("Bottom-up staff payroll", F_INT, 12), "AN": ("Top-down minus bottom-up $", F_INT, 12),
+    "AO": ("Fcst CPLH vs LY", F_PCT, 9),
 }
 UNITS = {"E": "$m", "F": "m", "G": "#", "H": "$m", "I": "$m", "J": "$m", "K": "#", "L": "$", "M": "$",
          "N": "%", "O": "%", "P": "%"}
@@ -582,6 +599,13 @@ def build_site(code, typ, state, host):
         ws[f"AG{r}"] = f"=IFERROR($AG$2*AD{r}*(1+TrendCPS)^AJ{r},\"\")"
         ws[f"AH{r}"] = f"=IFERROR($AH$2*AE{r}*Z{r}*AA{r}*(1+TrendCPH)^AJ{r},\"\")"
         ws[f"AI{r}"] = f"=IFERROR($AI$2*AF{r}*(1+TrendLead)^AJ{r},\"\")"
+        # bottom-up: hours needed at LY productivity (+ target), costed at forecast cost per hour
+        fc = f'$D{r}="Forecast"'
+        ws[f"AK{r}"] = f"=K{r - 12}" if i >= 12 else None
+        ws[f"AL{r}"] = f'=IF({fc},IFERROR(F{r}/(AK{r}*(1+ProdTarget)),""),"")'
+        ws[f"AM{r}"] = f'=IF({fc},IFERROR(AL{r}*AH{r},""),"")'
+        ws[f"AN{r}"] = f'=IF({fc},IFERROR(H{r}-AM{r},""),"")'
+        ws[f"AO{r}"] = f'=IF({fc},IFERROR(K{r}/AK{r}-1,""),"")'
     style_site_sheet(ws)
 
 
@@ -642,6 +666,8 @@ tables = [
     ("Cost per case ($, staff only)",
      lambda c, y: (f"IFERROR(SUMIFS('{c}'!$H${FIRST_ROW}:$H${LAST_ROW},'{c}'!$B${FIRST_ROW}:$B${LAST_ROW},{y})"
                    f"/SUMIFS('{c}'!$F${FIRST_ROW}:$F${LAST_ROW},'{c}'!$B${FIRST_ROW}:$B${LAST_ROW},{y}),0)"), F_CPC),
+    ("Staff payroll: top-down minus bottom-up ($m, forecast months; negative = plan looks too tight)",
+     lambda c, y: f"SUMIFS('{c}'!$AN${FIRST_ROW}:$AN${LAST_ROW},'{c}'!$B${FIRST_ROW}:$B${LAST_ROW},{y})", F_M),
 ]
 row = 4
 for title, fn, fmt in tables:
@@ -664,8 +690,9 @@ for col in "BCD":
 ws["A1"] = "Checks"
 ws["A1"].font = Font(bold=True, size=14)
 ws["A3"] = "Overall"
-ws["B3"] = '=IF(COUNTIF(D6:D40,"ERROR")=0,"ALL CHECKS OK","CHECK ERRORS")'
+ws["B3"] = '=IF(COUNTIF(D6:D80,"ERROR")=0,"ALL CHECKS OK","CHECK ERRORS")'
 ws["B3"].font = BOLD
+ws["C3"] = '=COUNTIF(D6:D80,"WARN")&" warning(s)"'
 for j, t in enumerate(["Check", "Value", "Expected", "Result"], 1):
     header(ws, 5, j, t)
 checks = []
@@ -691,15 +718,20 @@ checks.append(("Staff + leadership = total payroll (national, all months)",
 checks.append(("Months with negative staff payroll (leadership > total)",
                "=" + "+".join(f"COUNTIF('{s[0]}'!H{FIRST_ROW}:H{LAST_ROW},\"<0\")" for s in SITES), "=0", "eq"))
 checks.append(("At least 12 actual months for seasonality", f"={act_months}", "=SeasonMonths", "ge"))
+for code, *_r in SITES:
+    rng = f"'{code}'!AO{FIRST_ROW}:AO{LAST_ROW}"
+    checks.append((f"{code}: forecast months where CPLH moves more than the tolerance vs LY",
+                   f'=COUNTIF({rng},">"&CPLHTol)+COUNTIF({rng},"<"&-CPLHTol)', "=0", "warn"))
 for i, (label, val, exp, op) in enumerate(checks):
     r = 6 + i
     ws[f"A{r}"], ws[f"B{r}"], ws[f"C{r}"] = label, val, exp
-    test = f"ABS(B{r}-C{r})<=MAX(1,ABS(C{r})*0.000001)" if op == "eq" else f"B{r}>=C{r}"
-    ws[f"D{r}"] = f'=IF({test},"OK","ERROR")'
+    test = f"B{r}>=C{r}" if op == "ge" else f"ABS(B{r}-C{r})<=MAX(1,ABS(C{r})*0.000001)"
+    ws[f"D{r}"] = f'=IF({test},"OK","{"WARN" if op == "warn" else "ERROR"}")'
     for col in "BC":
         ws[f"{col}{r}"].number_format = F_INT
-ws.conditional_formatting.add("D6:D40", FormulaRule(formula=['D6="ERROR"'], fill=PatternFill("solid", fgColor="F8CBAD")))
-ws.conditional_formatting.add("D6:D40", FormulaRule(formula=['D6="OK"'], fill=PatternFill("solid", fgColor="C6EFCE")))
+ws.conditional_formatting.add("D6:D80", FormulaRule(formula=['D6="ERROR"'], fill=PatternFill("solid", fgColor="F8CBAD")))
+ws.conditional_formatting.add("D6:D80", FormulaRule(formula=['D6="OK"'], fill=PatternFill("solid", fgColor="C6EFCE")))
+ws.conditional_formatting.add("D6:D80", FormulaRule(formula=['D6="WARN"'], fill=PatternFill("solid", fgColor="FFEB9C")))
 
 # tab colours
 for nm in wb.sheetnames:

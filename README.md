@@ -124,14 +124,32 @@ Forecast rate = level x seasonal index x (1 + trend) ^ (years after last actual 
 
 The default is -1.5% a year on cases per $ and 0% on the others. Cost per hour already gets wage increases separately, so its trend is only for other drift.
 
+### Bottom-up cross-check
+
+**Why:** payroll % of sales drives the model, so CPLH just falls out of it. A plan could quietly need a 15% productivity jump and nothing would flag it.
+
+**How:** each site also works out what payroll *would* be if it kept last year's productivity:
+
+```
+Hours needed        = forecast cases / (CPLH in the same month last year x (1 + productivity target))
+Bottom-up payroll   = hours needed x forecast cost per hour
+Gap                 = plan staff payroll - bottom-up payroll
+```
+
+With the example above, if last year's CPLH was 72: 3.15m / 72 = 43,750 hours x $66 = $2.89m. The plan gives $2.68m, so the gap is **-$0.21m**. A negative gap means the plan is tighter than last year's productivity can deliver.
+
+- The productivity target (default 0%) is on the Inputs tab, e.g. +2% if the site is expected to improve.
+- The National tab shows the gap by site and year.
+- The Checks tab warns when forecast CPLH moves more than a tolerance (default 10%) from the same month last year.
+
 ## Workbook tabs
 
 - **README**: how to update and how the logic works
-- **Inputs**: last actual month, scenario switch, wage increases, public-holiday assumptions, site list, trends
+- **Inputs**: last actual month, scenario switch, wage increases, public-holiday assumptions, site list, trends, productivity target
 - **Data_Actuals**: actuals in long format (one row per site per month). Paste over it to update.
 - **Plan_Inputs**: sales forecast and payroll % of sales per site per month
 - **Holidays / Calendar**: public holidays by state, PH cost factor, wage index
-- **Checks**: data coverage and reconciliation checks
+- **Checks**: data coverage and reconciliation checks, plus CPLH warnings
 - **National**: all sites added up, plus site-by-year summaries
 - **One tab per site**: drivers and metrics on the left, helper columns (actuals, run rates, plan) in grey on the right
 
