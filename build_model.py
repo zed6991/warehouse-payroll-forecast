@@ -16,6 +16,11 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 OUT = "warehouse_payroll_forecast.xlsx"
+# bounded ranges (whole-column refs are slow); room for pasted data up to these rows
+DATA_MAX, HOL_MAX = 5000, 1000
+DR = lambda col: f"Data_Actuals!${col}$2:${col}${DATA_MAX}"
+PR = lambda col: f"Plan_Inputs!${col}$2:${col}${DATA_MAX}"
+HR = lambda col: f"Holidays!${col}$2:${col}${HOL_MAX}"
 START = date(2025, 1, 1)
 END = date(2028, 12, 1)
 LAST_ACTUAL = date(2026, 9, 1)
@@ -416,7 +421,7 @@ for i, m in enumerate(MONTHS):
     for k, st in enumerate(STATES):
         cnt = 3 + k
         ws.cell(row=r, column=cnt, value=(
-            f'=COUNTIFS(Holidays!$A:$A,">="&$A{r},Holidays!$A:$A,"<="&EOMONTH($A{r},0),Holidays!$C:$C,"{st}")'))
+            f'=COUNTIFS({HR("A")},">="&$A{r},{HR("A")},"<="&EOMONTH($A{r},0),{HR("C")},"{st}")'))
         h = get_column_letter(cnt)
         c = ws.cell(row=r, column=8 + k, value=(
             f"=($B{r}-{h}{r}+{h}{r}*PH_Roster*(1+PH_Loading))/($B{r}-{h}{r}+{h}{r}*PH_Roster)"))
@@ -448,7 +453,7 @@ ACT_WIN = lambda months: f'{RNG("A")},">"&EDATE(LastActual,-{months}),{RNG("A")}
 
 
 def data_sum(col, r):
-    return f"SUMIFS(Data_Actuals!${col}:${col},Data_Actuals!$A:$A,$A{r},Data_Actuals!$B:$B,$B$2)"
+    return f"SUMIFS({DR(col)},{DR('A')},$A{r},{DR('B')},$B$2)"
 
 
 def style_site_sheet(ws):
@@ -555,8 +560,8 @@ def build_site(code, typ, state, host):
         ws[f"Z{r}"] = (f"=INDEX(Calendar!$H$5:$L${4 + N},MATCH($A{r},Calendar!$A$5:$A${4 + N},0),"
                        f"MATCH($D$2,Calendar!$H$4:$L$4,0))")
         ws[f"AA{r}"] = f"=INDEX(Calendar!$M$5:$M${4 + N},MATCH($A{r},Calendar!$A$5:$A${4 + N},0))"
-        ws[f"AB{r}"] = f"=SUMIFS(Plan_Inputs!$C:$C,Plan_Inputs!$A:$A,$A{r},Plan_Inputs!$B:$B,$B$2)"
-        ws[f"AC{r}"] = f"=SUMIFS(Plan_Inputs!$D:$D,Plan_Inputs!$A:$A,$A{r},Plan_Inputs!$B:$B,$B$2)"
+        ws[f"AB{r}"] = f"=SUMIFS({PR('C')},{PR('A')},$A{r},{PR('B')},$B$2)"
+        ws[f"AC{r}"] = f"=SUMIFS({PR('D')},{PR('A')},$A{r},{PR('B')},$B$2)"
         for col, src in (("AD", "W"), ("AE", "X"), ("AF", "Y")):
             ws[f"{col}{r}"] = (f"=IFERROR(AVERAGEIFS({RNG(src)},{ACT_WIN('SeasonMonths')},{RNG('C')},$C{r})"
                                f"/AVERAGEIFS({RNG(src)},{ACT_WIN('SeasonMonths')}),\"\")")
@@ -650,17 +655,17 @@ ws["B3"].font = BOLD
 for j, t in enumerate(["Check", "Value", "Expected", "Result"], 1):
     header(ws, 5, j, t)
 checks = []
-act_months = 'DATEDIF(DATE(2025,1,1),LastActual,"m")+1'
-fc_months = 'DATEDIF(LastActual,DATE(2028,12,1),"m")'
+act_months = '(YEAR(LastActual)-2025)*12+MONTH(LastActual)'
+fc_months = '(2028-YEAR(LastActual))*12+12-MONTH(LastActual)'
 for code, *_r in SITES:
     checks.append((f"{code}: actual rows in Data_Actuals (one per month)",
-                   f'=COUNTIFS(Data_Actuals!$B:$B,"{code}",Data_Actuals!$A:$A,"<="&LastActual)', f"={act_months}", "eq"))
+                   f'=COUNTIFS({DR("B")},"{code}",{DR("A")},"<="&LastActual)', f"={act_months}", "eq"))
 for code, *_r in SITES:
     checks.append((f"{code}: plan payroll % present for every forecast month",
-                   f'=COUNTIFS(Plan_Inputs!$B:$B,"{code}",Plan_Inputs!$A:$A,">"&LastActual,Plan_Inputs!$D:$D,">0")',
+                   f'=COUNTIFS({PR("B")},"{code}",{PR("A")},">"&LastActual,{PR("D")},">0")',
                    f"={fc_months}", "eq"))
 checks.append(("Unknown site codes in Data_Actuals",
-               "=SUMPRODUCT((Data_Actuals!$B$2:$B$5000<>\"\")*(COUNTIF(SiteCodes,Data_Actuals!$B$2:$B$5000)=0))", "=0", "eq"))
+               f"=SUMPRODUCT(({DR('B')}<>\"\")*(COUNTIF(SiteCodes,{DR('B')})=0))", "=0", "eq"))
 checks.append(("National sales = sum of 8 regions (IDCs excluded)",
                f"=SUM(National!E{FIRST_ROW}:E{LAST_ROW})",
                "=" + "+".join(f"SUM('{c}'!E{FIRST_ROW}:E{LAST_ROW})" for c in REGIONS), "eq"))
