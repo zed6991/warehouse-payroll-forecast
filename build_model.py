@@ -52,6 +52,10 @@ REGIONS = [s[0] for s in SITES if s[1] == "Region"]
 # regions each IDC ships to: their sales drive IDC volume (payroll % stays on host sales)
 SERVED = {"IDC-NSW": ["NSW-1", "NSW-2"], "IDC-VIC": ["VIC-1", "VIC-2"]}
 STATES = ["NSW", "VIC", "QLD", "SA", "WA"]
+# every site code in the workbook reads from the Code column of the Sites table on Inputs,
+# so typing new codes there renames the sites everywhere (tab names are cosmetic)
+SITE_ROW = {s[0]: 36 + i for i, s in enumerate(SITES)}
+CODE = lambda c: f"Inputs!$A${SITE_ROW[c]}"
 
 WAGE_TABLE = [(date(2026, 1, 1), 0.040), (date(2027, 1, 1), 0.045), (date(2028, 1, 1), 0.045)]
 PH_ROSTER = 0.5   # share of a normal day's hours worked on a public holiday
@@ -242,13 +246,13 @@ readme = [
     ("4. Check the Checks tab says ALL CHECKS OK.", None),
     ("", None),
     ("FORECAST LOGIC (per site, per month)", BOLD),
-    ("Sales = plan sales x (1 + scenario sales lever). IDCs use their host region's sales (IDC-NSW = NSW-1, IDC-VIC = VIC-1).", None),
+    ("Sales = plan sales x (1 + scenario sales lever). IDCs use their host region's sales (Sites table on Inputs).", None),
     ("Total payroll = sales x plan payroll % (the driver).", None),
     ("Leadership = sales x leadership % run rate, or run-rate $ stepped up by wage increases (switch on Inputs).", None),
     ("Staff payroll = total payroll - leadership.", None),
     ("Cost per hour = run rate x public-holiday factor x wage index.  Hours = staff payroll / cost per hour.", None),
     ("Cases = volume driver sales x cases-per-$ run rate x (1 + scenario cases lever).", None),
-    ("Volume driver: a region's own sales; an IDC's served regions (IDC-NSW: NSW-1+NSW-2, IDC-VIC: VIC-1+VIC-2).", None),
+    ("Volume driver: a region's own sales; an IDC's served regions (Sites table on Inputs).", None),
     ("Each run rate can drift by a yearly trend (Inputs), e.g. price inflation lowering cases per $ of sales.", None),
     ("CPLH = cases / hours.  Cost per case = staff payroll / cases (excludes leadership).", None),
     ("", None),
@@ -265,7 +269,10 @@ readme = [
     ("So Easter moving from April to March, or an extra holiday, changes cost per hour in that month.", None),
     ("", None),
     ("NATIONAL", BOLD),
-    ("Sales = 8 regions only (IDC sales are a copy of NSW-1/VIC-1 and are excluded). Cases, hours and payroll = all 10 sites.", None),
+    ("Sales = 8 regions only (IDC sales are a copy of the host's and are excluded). Cases, hours and payroll = all 10 sites.", None),
+    ("", None),
+    ("SITE CODES", BOLD),
+    ("Type your own codes in the Code column of the Sites table on Inputs; every tab follows. Renaming the tabs is optional.", None),
     ("", None),
     ("COLOURS", BOLD),
     ("Yellow cells with blue text are inputs. Blue-shaded rows are forecast months. Grey columns are helper calculations.", None),
@@ -386,13 +393,17 @@ name("PH_Loading", "Inputs!$B$32")
 
 ws["A34"] = "Sites"
 ws["A34"].font = BOLD
+ws["B34"] = "Type your own codes in the Code column; every tab follows. Renaming the tabs to match is optional."
+ws["B34"].font = HELP
 for j, t in enumerate(["Code", "Type", "State", "Payroll % basis", "In national sales?", "Volume driver"], 1):
     header(ws, 35, j, t)
 for i, (code, typ, st, host) in enumerate(SITES):
     r = 36 + i
-    vals = [code, typ, st, host or code, "No" if typ == "IDC" else "Yes", "+".join(SERVED.get(code, [code]))]
+    vals = [code, typ, st, f"=A{SITE_ROW[host or code]}", "No" if typ == "IDC" else "Yes",
+            "=" + '&"+"&'.join(f"A{SITE_ROW[s]}" for s in SERVED.get(code, [code]))]
     for j, v in enumerate(vals, 1):
         ws.cell(row=r, column=j, value=v)
+    ws.cell(row=r, column=1).fill, ws.cell(row=r, column=1).font = INPUT, BLUE
 name("SiteCodes", f"Inputs!$A$36:$A${35 + len(SITES)}")
 
 # ------------------------------------------------------------ Data_Actuals
@@ -406,7 +417,7 @@ for m in MONTHS:
         break
     for code, typ, _, _ in SITES:
         v = DATA[(code, m)]
-        row = [m, code, None if typ == "IDC" else round(v["sales"]), round(v["cases"]), round(v["hours"]),
+        row = [m, "=" + CODE(code), None if typ == "IDC" else round(v["sales"]), round(v["cases"]), round(v["hours"]),
                round(v["staff"]), round(v["lead"])]
         for j, val in enumerate(row, 1):
             c = ws.cell(row=r, column=j, value=val)
@@ -418,7 +429,7 @@ ws.freeze_panes = "A2"
 ws = wb.create_sheet("Plan_Inputs")
 for j, t in enumerate(["Month", "Site", "Sales forecast $", "Payroll % of sales (total)"], 1):
     header(ws, 1, j, t, width=22)
-ws["F1"] = "Stand-in for the long-range plan. IDC payroll % is a % of the host region's sales (IDC-NSW: NSW-1, IDC-VIC: VIC-1)."
+ws["F1"] = "Stand-in for the long-range plan. IDC payroll % is a % of the host region's sales (see Sites on Inputs)."
 ws["F1"].font = HELP
 r = 2
 for m in MONTHS:
@@ -427,7 +438,7 @@ for m in MONTHS:
     for code, typ, _, host in SITES:
         v = DATA[(code, m)]
         pct = round((v["staff"] + v["lead"]) / v["sales"], 4)
-        row = [m, code, None if typ == "IDC" else round(v["sales"], -3), pct]
+        row = [m, "=" + CODE(code), None if typ == "IDC" else round(v["sales"], -3), pct]
         for j, val in enumerate(row, 1):
             c = ws.cell(row=r, column=j, value=val)
             c.number_format = [F_DATE, None, F_INT, F_PCT][j - 1] or "General"
@@ -569,10 +580,11 @@ def fy_block(ws):
 
 def build_site(code, typ, state, host):
     ws = wb.create_sheet(code)
-    ws["A1"] = f"{code}  |  {typ}  |  {state}" + (
-        f"  |  payroll % of {host} sales  |  volume from {'+'.join(SERVED[code])} sales" if host else "")
+    ws["A1"] = f'=$B$2&"  |  {typ}  |  {state}' + (
+        f'  |  payroll % of "&{CODE(host)}&" sales  |  volume from "&'
+        + '&"+"&'.join(CODE(s) for s in SERVED[code]) + '&" sales"' if host else '"')
     ws["A1"].font = Font(bold=True, size=14)
-    ws["A2"], ws["B2"], ws["C2"], ws["D2"] = "Code", code, "State", state
+    ws["A2"], ws["B2"], ws["C2"], ws["D2"] = "Code", "=" + CODE(code), "State", state
     ws["B2"].font = ws["D2"].font = BOLD
     # run-rate levels
     ws["AF2"], ws["AF3"] = "Run-rate level:", "(last 6 mths / season idx)"
@@ -702,7 +714,7 @@ for title, fn, fmt in tables:
     for k, y in enumerate(YEARS):
         header(ws, row + 1, 19 + k, f"FY{y}", width=11)
     for i, (code, *_rest) in enumerate(SITES):
-        ws.cell(row=row + 2 + i, column=18, value=code)
+        ws.cell(row=row + 2 + i, column=18, value="=" + CODE(code))
         for k, y in enumerate(YEARS):
             c = ws.cell(row=row + 2 + i, column=19 + k, value="=" + fn(code, y))
             c.number_format = fmt
@@ -725,11 +737,11 @@ checks = []
 act_months = '(YEAR(LastActual)-2025)*12+MONTH(LastActual)'
 fc_months = '(2028-YEAR(LastActual))*12+12-MONTH(LastActual)'
 for code, *_r in SITES:
-    checks.append((f"{code}: actual rows in Data_Actuals (one per month)",
-                   f'=COUNTIFS({DR("B")},"{code}",{DR("A")},"<="&LastActual)', f"={act_months}", "eq"))
+    checks.append((f'={CODE(code)}&": actual rows in Data_Actuals (one per month)"',
+                   f'=COUNTIFS({DR("B")},{CODE(code)},{DR("A")},"<="&LastActual)', f"={act_months}", "eq"))
 for code, *_r in SITES:
-    checks.append((f"{code}: plan payroll % present for every forecast month",
-                   f'=COUNTIFS({PR("B")},"{code}",{PR("A")},">"&LastActual,{PR("D")},">0")',
+    checks.append((f'={CODE(code)}&": plan payroll % present for every forecast month"',
+                   f'=COUNTIFS({PR("B")},{CODE(code)},{PR("A")},">"&LastActual,{PR("D")},">0")',
                    f"={fc_months}", "eq"))
 checks.append(("Unknown site codes in Data_Actuals",
                f"=SUMPRODUCT(({DR('B')}<>\"\")*(COUNTIF(SiteCodes,{DR('B')})=0))", "=0", "eq"))
@@ -746,7 +758,7 @@ checks.append(("Months with negative staff payroll (leadership > total)",
 checks.append(("At least 12 actual months for seasonality", f"={act_months}", "=SeasonMonths", "ge"))
 for code, *_r in SITES:
     rng = f"'{code}'!AO{FIRST_ROW}:AO{LAST_ROW}"
-    checks.append((f"{code}: forecast months where CPLH moves more than the tolerance vs LY",
+    checks.append((f'={CODE(code)}&": forecast months where CPLH moves more than the tolerance vs LY"',
                    f'=COUNTIF({rng},">"&CPLHTol)+COUNTIF({rng},"<"&-CPLHTol)', "=0", "warn"))
 for i, (label, val, exp, op) in enumerate(checks):
     r = 6 + i
@@ -808,7 +820,7 @@ ws["A1"].font = Font(bold=True, size=14)
 ws["A3"] = "Site"
 ws["B3"] = "National"
 ws["B3"].fill, ws["B3"].font = INPUT, Font(bold=True, color="0000FF")
-site_dv = DataValidation(type="list", formula1='"National,' + ",".join(c for c, *_ in SITES) + '"')
+site_dv = DataValidation(type="list", formula1=f"$Y$4:$Y${4 + len(SITES)}")
 ws.add_data_validation(site_dv)
 site_dv.add("B3")
 ws["C3"] = "Pick a site to update every chart. Blue = actual, orange = forecast."
@@ -817,7 +829,7 @@ ws["A4"] = "Status"
 ws["B4"] = "=Checks!B3"
 DASH_SITES = ["National"] + [c for c, *_ in SITES]
 for i, nm in enumerate(DASH_SITES):
-    ws.cell(row=4 + i, column=25, value=nm).font = HELP  # column Y: selector list
+    ws.cell(row=4 + i, column=25, value=nm if i == 0 else "=" + CODE(nm)).font = HELP  # column Y: selector list
 ws["X3"] = "Site no."
 ws["X4"] = f"=MATCH($B$3,$Y$4:$Y${3 + len(DASH_SITES)},0)"
 ws["X3"].font = ws["X4"].font = HELP

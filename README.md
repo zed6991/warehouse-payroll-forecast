@@ -170,10 +170,20 @@ With the example above, if last year's CPLH was 72: 3.15m / 72 = 43,750 hours x 
 - **% of sales** (the default, as in the first version): leadership grows with sales.
 - **$ + wage increases**: recent leadership dollars (seasonally adjusted, with past wage increases stripped out) stepped up by each wage increase.
 
+### Using your own site codes
+
+**Why:** the published model uses made-up codes, but you may want to run it with your own.
+
+**How:** type your codes in the **Code** column of the Sites table on the Inputs tab. Everything that matches on site code reads from that column: the sample data, Checks, the National summary, the Dashboard dropdown and each site tab's title. Change a code there and the whole workbook follows.
+
+- **Tab names are optional.** You can rename the site tabs to match the new codes. Excel updates every formula that points at a renamed tab.
+- **Real actuals:** paste them into Data_Actuals and Plan_Inputs with the same codes you typed on the Inputs tab. The paste replaces the sample rows, which are formulas pointing at the Code column.
+- **For the rebuilt file:** edit the `SITES`, `SERVED` and `PARAMS` codes at the top of `build_model.py` and run it again. That renames the tabs too.
+
 ## Workbook tabs
 
 - **README**: how to update and how the logic works
-- **Inputs**: last actual month, scenario switch, wage increases, public-holiday assumptions, site list, trends, productivity target, leadership method
+- **Inputs**: last actual month, scenario switch, wage increases, public-holiday assumptions, site list, trends, productivity target, leadership method, site codes
 - **Data_Actuals**: actuals in long format (one row per site per month). Paste over it to update.
 - **Plan_Inputs**: sales forecast and payroll % of sales per site per month
 - **Holidays / Calendar**: public holidays by state, PH cost factor, wage index
