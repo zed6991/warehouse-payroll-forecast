@@ -55,6 +55,7 @@ STATES = ["NSW", "VIC", "QLD", "SA", "WA"]
 # every site code in the workbook reads from the Code column of the Sites table on Inputs,
 # so typing new codes there renames the sites everywhere (tab names are cosmetic)
 SITE_ROW = {s[0]: 36 + i for i, s in enumerate(SITES)}
+SITE_IDX = {s[0]: i for i, s in enumerate(SITES)}
 CODE = lambda c: f"Inputs!$A${SITE_ROW[c]}"
 
 WAGE_TABLE = [(date(2026, 1, 1), 0.040), (date(2027, 1, 1), 0.045), (date(2028, 1, 1), 0.045)]
@@ -251,7 +252,8 @@ readme = [
     ("Leadership = sales x leadership % run rate, or run-rate $ stepped up by wage increases (switch on Inputs).", None),
     ("Staff payroll = total payroll - leadership.", None),
     ("Cost per hour = run rate x public-holiday factor x wage index.  Hours = staff payroll / cost per hour.", None),
-    ("Cases = volume driver sales x cases-per-$ run rate x (1 + scenario cases lever).", None),
+    ("Cases come from the Cases_Forecast tab: run rate (volume driver sales x cases per $ x (1 + scenario cases lever)),", None),
+    ("plus your monthly adjustments by site. An override there replaces both.", None),
     ("Volume driver: a region's own sales; an IDC's served regions (Sites table on Inputs).", None),
     ("Each run rate can drift by a yearly trend (Inputs), e.g. price inflation lowering cases per $ of sales.", None),
     ("CPLH = cases / hours.  Cost per hour = staff payroll / hours (excludes leadership). Cost per case = total payroll / cases (includes leadership).", None),
@@ -270,6 +272,9 @@ readme = [
     ("", None),
     ("NATIONAL", BOLD),
     ("Sales = 8 regions only (IDC sales are a copy of the host's and are excluded). Cases, hours and payroll = all 10 sites.", None),
+    ("", None),
+    ("CLR", BOLD),
+    ("Placeholder tab for cost-saving initiatives. Not linked to the forecast yet.", None),
     ("", None),
     ("SITE CODES", BOLD),
     ("Type your own codes in the Code column of the Sites table on Inputs; every tab follows. Renaming the tabs is optional.", None),
@@ -445,6 +450,63 @@ for m in MONTHS:
         r += 1
 ws.freeze_panes = "A2"
 
+# ---------------------------------------------------------- Cases_Forecast
+# months down, sites across, in four blocks: run rate | adjustments | overrides | cases used
+CF_FIRST = 8
+CF_LAST = CF_FIRST + N - 1
+CF_BLOCKS = ["1. Run-rate forecast", "2. Adjustments (+/- cases)", "3. Override (replaces 1 + 2)",
+             "4. Cases forecast used"]
+cf_col = lambda block, i: get_column_letter(3 + block * (len(SITES) + 1) + i)
+ws = wb.create_sheet("Cases_Forecast")
+ws["A1"] = "Cases forecast"
+ws["A1"].font = Font(bold=True, size=14)
+for k, line in enumerate([
+        "1. Run rate: volume driver sales x cases-per-$ run rate x (1 + scenario cases lever). Actual months show actuals.",
+        "2. Adjustments: type extra cases (or negative) for a site and month, e.g. a new store or volume moving between sites.",
+        "3. Override: type the cases you want for a site and month. It replaces 1 + 2. Leave blank to use the model.",
+        "4. Cases used = override if there is one, otherwise run rate + adjustment. This feeds Cases picked on each site tab."]):
+    ws.cell(row=2 + k, column=1, value=line).font = HELP
+header(ws, 7, 1, "Month", width=9)
+header(ws, 7, 2, "Status", width=9)
+for b, title in enumerate(CF_BLOCKS):
+    first, last = cf_col(b, 0), cf_col(b, len(SITES) - 1)
+    ws.merge_cells(f"{first}6:{last}6")
+    header(ws, 6, ws[f"{first}1"].column, title)
+    ws.column_dimensions[get_column_letter(ws[f"{last}1"].column + 1)].width = 2
+    for i, (code, *_r) in enumerate(SITES):
+        col = cf_col(b, i)
+        header(ws, 7, ws[f"{col}1"].column, "=" + CODE(code), width=11)
+for i, m in enumerate(MONTHS):
+    r, src_r = CF_FIRST + i, FIRST_ROW + i
+    ws[f"A{r}"] = m
+    ws[f"A{r}"].number_format = F_DATE
+    ws[f"B{r}"] = f'=IF(A{r}<=LastActual,"Actual","Forecast")'
+    for j, (code, *_r) in enumerate(SITES):
+        rr, adj, ovr, used = (cf_col(b, j) for b in range(4))
+        ws[f"{rr}{r}"] = (f"=IF($B{r}=\"Actual\",'{code}'!S{src_r},"
+                          f"IFERROR('{code}'!AP{src_r}*'{code}'!AG{src_r}*(1+CasesAdj),0))")
+        ws[f"{used}{r}"] = (f'=IF($B{r}="Actual",{rr}{r},IF({ovr}{r}<>"",{ovr}{r},{rr}{r}+N({adj}{r})))')
+        for col in (adj, ovr):
+            ws[f"{col}{r}"].fill, ws[f"{col}{r}"].font = INPUT, BLUE
+        for col in (rr, adj, ovr, used):
+            ws[f"{col}{r}"].number_format = F_INT
+        ws[f"{used}{r}"].font = BOLD
+CF_RANGE = lambda b: f"Cases_Forecast!${cf_col(b, 0)}${CF_FIRST}:${cf_col(b, len(SITES) - 1)}${CF_LAST}"
+CF_STATUS = f"Cases_Forecast!$B${CF_FIRST}:$B${CF_LAST}"
+ws.conditional_formatting.add(f"A{CF_FIRST}:{cf_col(3, len(SITES) - 1)}{CF_LAST}",
+                              FormulaRule(formula=[f'$B{CF_FIRST}="Actual"'], fill=GREY))
+ws.freeze_panes = f"C{CF_FIRST}"
+
+# ---------------------------------------------------------------------- CLR
+ws = wb.create_sheet("CLR")
+ws["A1"] = "CLR: cost-saving initiatives (placeholder)"
+ws["A1"].font = Font(bold=True, size=14)
+ws["A2"] = "Placeholder only. Nothing on this tab feeds the forecast yet."
+ws["A2"].font = HELP
+for j, (t, wd) in enumerate([("Initiative", 30), ("Site", 10), ("Type", 18), ("Value", 11), ("Start month", 11),
+                              ("Ramp-up months", 11), ("End month", 11), ("Active", 8), ("Owner / notes", 30)], 1):
+    header(ws, 4, j, t, width=wd)
+
 # ---------------------------------------------------------------- Holidays
 ws = wb.create_sheet("Holidays")
 for j, t in enumerate(["Date", "Holiday", "State"], 1):
@@ -609,7 +671,7 @@ def build_site(code, typ, state, host):
         else:
             ws[f"E{r}"] = f"=IF({act},R{r},AB{r}*(1+SalesAdj))"
             ws[f"R{r}"] = f'=IF({act},{data_sum("C", r)},"")'
-        ws[f"F{r}"] = f"=IF({act},S{r},AP{r}*AG{r}*(1+CasesAdj))"
+        ws[f"F{r}"] = f"=IF({act},S{r},Cases_Forecast!{cf_col(3, SITE_IDX[code])}{CF_FIRST + i})"
         ws[f"AQ{r}"] = f'=IF({act},IFERROR(V{r}/AA{r},""),"")'
         ws[f"AR{r}"] = (f"=IFERROR(AVERAGEIFS({RNG('AQ')},{ACT_WIN('SeasonMonths')},{RNG('C')},$C{r})"
                         f"/AVERAGEIFS({RNG('AQ')},{ACT_WIN('SeasonMonths')}),\"\")")
@@ -755,6 +817,9 @@ checks.append(("Staff + leadership = total payroll (national, all months)",
                f"=SUM(National!H{FIRST_ROW}:I{LAST_ROW})", f"=SUM(National!J{FIRST_ROW}:J{LAST_ROW})", "eq"))
 checks.append(("Months with negative staff payroll (leadership > total)",
                "=" + "+".join(f"COUNTIF('{s[0]}'!H{FIRST_ROW}:H{LAST_ROW},\"<0\")" for s in SITES), "=0", "eq"))
+for b, what in ((1, "adjustments"), (2, "overrides")):
+    checks.append((f"Cases_Forecast: {what} typed in actual months (ignored)",
+                   f'=SUMPRODUCT(({CF_STATUS}="Actual")*({CF_RANGE(b)}<>""))', "=0", "warn"))
 checks.append(("At least 12 actual months for seasonality", f"={act_months}", "=SeasonMonths", "ge"))
 for code, *_r in SITES:
     rng = f"'{code}'!AO{FIRST_ROW}:AO{LAST_ROW}"
@@ -763,7 +828,8 @@ for code, *_r in SITES:
 for i, (label, val, exp, op) in enumerate(checks):
     r = 6 + i
     ws[f"A{r}"], ws[f"B{r}"], ws[f"C{r}"] = label, val, exp
-    test = f"B{r}>=C{r}" if op == "ge" else f"ABS(B{r}-C{r})<=MAX(1,ABS(C{r})*0.000001)"
+    # warn checks are counts, so compare exactly; eq checks allow $ rounding
+    test = {"ge": f"B{r}>=C{r}", "warn": f"B{r}=C{r}"}.get(op, f"ABS(B{r}-C{r})<=MAX(1,ABS(C{r})*0.000001)")
     ws[f"D{r}"] = f'=IF({test},"OK","{"WARN" if op == "warn" else "ERROR"}")'
     for col in "BC":
         ws[f"{col}{r}"].number_format = F_INT
@@ -912,7 +978,7 @@ for col in "ABCDEFGHIJKLMNOPQRSTUVW":
 
 # tab colours
 for nm in wb.sheetnames:
-    if nm in ("Inputs", "Data_Actuals", "Plan_Inputs", "Holidays"):
+    if nm in ("Inputs", "Data_Actuals", "Plan_Inputs", "Holidays", "Cases_Forecast", "CLR"):
         wb[nm].sheet_properties.tabColor = "FFC000"
     elif nm in REGIONS:
         wb[nm].sheet_properties.tabColor = "1F3864"
