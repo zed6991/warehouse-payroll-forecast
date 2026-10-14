@@ -40,7 +40,7 @@ An example for one region in one month:
 | 4. Staff payroll | $3.00m - $0.32m | $2.68m |
 | 5. Cost per hour | Recent average, adjusted for this month's public holidays and wage increases | $66 |
 | 6. Hours | $2.68m / $66 | 40,600 hours |
-| 7. Cases | $150m x 0.021 cases per $ of sales | 3.15m cases |
+| 7. Cases | $150m x 0.021 cases per $ of sales, from the Cases_Forecast tab | 3.15m cases |
 | 8. CPLH | 3.15m cases / 40,600 hours | 77.6 cases an hour |
 | 9. Cost per case | $3.00m / 3.15m cases (total payroll, including leadership) | $0.95 |
 
@@ -110,7 +110,8 @@ One cell drives everything: **Last actual month** on the Inputs tab. Months up t
 1. Paste the new actuals into Data_Actuals (one row per site per month, keep the column order). There is room for 5,000 rows.
 2. Paste the updated plan (sales forecast and payroll % of sales) into Plan_Inputs.
 3. Move **Last actual month** forward.
-4. Check that the Checks tab says **ALL CHECKS OK**.
+4. Review the Cases_Forecast tab, and clear adjustments or overrides for months that are now actuals.
+5. Check that the Checks tab says **ALL CHECKS OK**.
 
 ## Added after the first version
 
@@ -188,12 +189,33 @@ With the example above, if last year's CPLH was 72: 3.15m / 72 = 43,750 hours x 
 
 **How:** cost per case is now total payroll / cases ($0.95 in the example, up from $0.85 for staff only). Cost per hour is unchanged: staff payroll / staff hours. The bottom-up check uses cost per hour, so it is unaffected.
 
+### Cases forecast tab
+
+**Why:** sales and payroll % are given by the plan and don't change, but cases need judgement: a new store, a range change or volume moving between sites won't show up in a run rate. Cases also needed one place where they can be reviewed and changed without touching the formulas on the site tabs.
+
+**How:** the Cases_Forecast tab has months down the side and one column per site, in four blocks:
+
+1. **Run-rate forecast**: volume driver sales x cases per $ run rate x (1 + scenario cases lever), worked out as before. Actual months show actual cases.
+2. **Adjustments**: type extra cases (or a negative number) for a site and month. They are added to the run rate.
+3. **Override**: type the cases you want for a site and month. They replace the run rate and the adjustment.
+4. **Cases forecast used**: the override if there is one, otherwise run rate + adjustment. This is what feeds *Cases picked* on each site tab, and from there CPLH, cost per case and the dashboard.
+
+Adjustments and overrides are separate yellow input cells, so typing in them never overwrites a formula. Clearing a cell puts the model value back. Anything typed in an actual month is ignored, and the Checks tab warns about it.
+
+Payroll doesn't change when cases change, because payroll still comes from sales x plan payroll %. What changes is the CPLH the plan implies: more cases for the same hours means the site has to be more productive.
+
+### CLR (placeholder)
+
+A CLR tab for cost-saving initiatives (initiative, site, type, value, start month, ramp-up, end month, active). It is a placeholder for now. Nothing on it feeds the forecast yet.
+
 ## Workbook tabs
 
 - **README**: how to update and how the logic works
 - **Inputs**: last actual month, scenario switch, wage increases, public-holiday assumptions, site list, trends, productivity target, leadership method, site codes
 - **Data_Actuals**: actuals in long format (one row per site per month). Paste over it to update.
 - **Plan_Inputs**: sales forecast and payroll % of sales per site per month
+- **Cases_Forecast**: run-rate cases, your monthly adjustments and overrides by site, and the cases used
+- **CLR**: placeholder for cost-saving initiatives (not linked yet)
 - **Holidays / Calendar**: public holidays by state, PH cost factor, wage index
 - **Checks**: data coverage and reconciliation checks, plus CPLH warnings
 - **Dashboard**: site selector and charts
