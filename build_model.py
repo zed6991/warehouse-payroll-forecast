@@ -254,7 +254,7 @@ readme = [
     ("Cases = volume driver sales x cases-per-$ run rate x (1 + scenario cases lever).", None),
     ("Volume driver: a region's own sales; an IDC's served regions (Sites table on Inputs).", None),
     ("Each run rate can drift by a yearly trend (Inputs), e.g. price inflation lowering cases per $ of sales.", None),
-    ("CPLH = cases / hours.  Cost per case = staff payroll / cases (excludes leadership).", None),
+    ("CPLH = cases / hours.  Cost per hour = staff payroll / hours (excludes leadership). Cost per case = total payroll / cases (includes leadership).", None),
     ("", None),
     ("BOTTOM-UP CROSS-CHECK", BOLD),
     ("Bottom-up staff payroll = cases / (LY CPLH x (1 + productivity target)) x forecast cost per hour.", None),
@@ -550,7 +550,7 @@ def style_site_sheet(ws):
 def metric_formulas(ws, r):
     ws[f"K{r}"] = f"=IFERROR(F{r}/G{r},0)"
     ws[f"L{r}"] = f"=IFERROR(H{r}/G{r},0)"
-    ws[f"M{r}"] = f"=IFERROR(H{r}/F{r},0)"
+    ws[f"M{r}"] = f"=IFERROR(J{r}/F{r},0)"
     ws[f"N{r}"] = f"=IFERROR(H{r}/E{r},0)"
     ws[f"O{r}"] = f"=IFERROR(I{r}/E{r},0)"
     ws[f"P{r}"] = f"=IFERROR(J{r}/E{r},0)"
@@ -701,8 +701,8 @@ tables = [
     ("CPLH (cases / hr)",
      lambda c, y: (f"IFERROR(SUMIFS('{c}'!$F${FIRST_ROW}:$F${LAST_ROW},'{c}'!$B${FIRST_ROW}:$B${LAST_ROW},{y})"
                    f"/SUMIFS('{c}'!$G${FIRST_ROW}:$G${LAST_ROW},'{c}'!$B${FIRST_ROW}:$B${LAST_ROW},{y}),0)"), F_1),
-    ("Cost per case ($, staff only)",
-     lambda c, y: (f"IFERROR(SUMIFS('{c}'!$H${FIRST_ROW}:$H${LAST_ROW},'{c}'!$B${FIRST_ROW}:$B${LAST_ROW},{y})"
+    ("Cost per case ($, incl. leadership)",
+     lambda c, y: (f"IFERROR(SUMIFS('{c}'!$J${FIRST_ROW}:$J${LAST_ROW},'{c}'!$B${FIRST_ROW}:$B${LAST_ROW},{y})"
                    f"/SUMIFS('{c}'!$F${FIRST_ROW}:$F${LAST_ROW},'{c}'!$B${FIRST_ROW}:$B${LAST_ROW},{y}),0)"), F_CPC),
     ("Staff payroll: top-down minus bottom-up ($m, forecast months; negative = plan looks too tight)",
      lambda c, y: f"SUMIFS('{c}'!$AN${FIRST_ROW}:$AN${LAST_ROW},'{c}'!$B${FIRST_ROW}:$B${LAST_ROW},{y})", F_M),
@@ -837,7 +837,7 @@ ws["X3"].font = ws["X4"].font = HELP
 # chart data for the selected site (helper block from column AA)
 METRICS = [("Total payroll", "J", '#,##0.0,,"m"'), ("WH hours worked", "G", '#,##0'),
            ("CPLH (cases / hr)", "K", '0'), ("Cost per hour", "L", '$0'),
-           ("Cost per case (staff)", "M", '$0.00'), ("Total payroll % of sales", "P", '0.0%')]
+           ("Cost per case (incl. leadership)", "M", '$0.00'), ("Total payroll % of sales", "P", '0.0%')]
 C0 = 27  # column AA
 ws.cell(row=2, column=C0, value="Chart data for the selected site (do not edit)").font = HELP
 ws.cell(row=3, column=C0, value="Month").font = BOLD

@@ -42,9 +42,11 @@ An example for one region in one month:
 | 6. Hours | $2.68m / $66 | 40,600 hours |
 | 7. Cases | $150m x 0.021 cases per $ of sales | 3.15m cases |
 | 8. CPLH | 3.15m cases / 40,600 hours | 77.6 cases an hour |
-| 9. Cost per case | $2.68m / 3.15m cases (staff only) | $0.85 |
+| 9. Cost per case | $3.00m / 3.15m cases (total payroll, including leadership) | $0.95 |
 
 How to read it: the plan gives this site $2.68m for staff. At $66 an hour that buys 40,600 hours. Picking 3.15m cases in 40,600 hours means running at 77.6 cases an hour. If the site ran at 72 last year, the plan quietly assumes an 8% productivity gain. The model makes that assumption visible.
+
+Cost per hour uses staff payroll only, because only staff hours are counted. Leadership is salaried, so including it would inflate the cost of each hour worked. Cost per case uses total payroll, because it answers "what does it cost to move a case", and leadership is part of that cost.
 
 Every site tab shows these columns for every month, with actuals up to the last actual month and the forecast after it.
 
@@ -179,6 +181,12 @@ With the example above, if last year's CPLH was 72: 3.15m / 72 = 43,750 hours x 
 - **Tab names are optional.** You can rename the site tabs to match the new codes. Excel updates every formula that points at a renamed tab.
 - **Real actuals:** paste them into Data_Actuals and Plan_Inputs with the same codes you typed on the Inputs tab. The paste replaces the sample rows, which are formulas pointing at the Code column.
 - **For the rebuilt file:** edit the `SITES`, `SERVED` and `PARAMS` codes at the top of `build_model.py` and run it again. That renames the tabs too.
+
+### Cost per case includes leadership
+
+**Why:** cost per case should show the full warehouse labour cost of moving a case. Leadership is part of that cost, even though it is not part of the cost of an hour worked.
+
+**How:** cost per case is now total payroll / cases ($0.95 in the example, up from $0.85 for staff only). Cost per hour is unchanged: staff payroll / staff hours. The bottom-up check uses cost per hour, so it is unaffected.
 
 ## Workbook tabs
 
